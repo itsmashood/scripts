@@ -25,6 +25,8 @@ local sending = false
 
 local configFolder = "HouseHelperConfigs"
 local configName = "default"
+local selectedConfig = "default"
+local autoloadFile = configFolder .. "/autoload.txt"
 
 local lastHouseState = nil
 local busyHouseState = false
@@ -46,10 +48,6 @@ local function safeName(name)
     return name
 end
 
-local function getConfigPath()
-    return configFolder .. "/" .. safeName(configName) .. ".json"
-end
-
 local function ensureFolder()
     if makefolder and isfolder and not isfolder(configFolder) then
         pcall(function()
@@ -60,6 +58,11 @@ local function ensureFolder()
             makefolder(configFolder)
         end)
     end
+end
+
+local function getConfigPath(name)
+    name = safeName(name or configName)
+    return configFolder .. "/" .. name .. ".json"
 end
 
 local function applyConfigData(data)
@@ -81,10 +84,20 @@ local function applyConfigData(data)
     return true
 end
 
+local function loadAutoloadName()
+    if isfile and readfile and isfile(autoloadFile) then
+        local saved = safeName(readfile(autoloadFile))
+        if saved ~= "" then
+            configName = saved
+            selectedConfig = saved
+        end
+    end
+end
+
 local function loadConfigSilent()
     if not isfile or not readfile then return end
 
-    local path = getConfigPath()
+    local path = getConfigPath(configName)
     if not isfile(path) then return end
 
     local ok, data = pcall(function()
@@ -96,7 +109,27 @@ local function loadConfigSilent()
     end
 end
 
+loadAutoloadName()
 loadConfigSilent()
+
+local function getConfigList()
+    local list = {}
+
+    if listfiles and isfolder and isfolder(configFolder) then
+        for _, file in ipairs(listfiles(configFolder)) do
+            local name = tostring(file):match("([^/\\]+)%.json$")
+            if name then
+                table.insert(list, name)
+            end
+        end
+    end
+
+    if #list == 0 then
+        table.insert(list, "default")
+    end
+
+    return list
+end
 
 local function saveConfig()
     if not writefile then
@@ -113,10 +146,11 @@ local function saveConfig()
     }
 
     local ok, err = pcall(function()
-        writefile(getConfigPath(), HttpService:JSONEncode(data))
+        writefile(getConfigPath(configName), HttpService:JSONEncode(data))
     end)
 
     if ok then
+        selectedConfig = configName
         notify("House Helper", "Config saved: " .. safeName(configName), 2)
     else
         warn(err)
@@ -124,16 +158,19 @@ local function saveConfig()
     end
 end
 
-local function loadConfig()
+local function loadConfig(name)
     if not isfile or not readfile then
         notify("House Helper", "readfile/isfile not supported.", 3)
         return
     end
 
-    local path = getConfigPath()
+    configName = safeName(name or selectedConfig or configName)
+    selectedConfig = configName
+
+    local path = getConfigPath(configName)
 
     if not isfile(path) then
-        notify("House Helper", "Config not found: " .. safeName(configName), 3)
+        notify("House Helper", "Config not found: " .. configName, 3)
         return
     end
 
@@ -142,9 +179,39 @@ local function loadConfig()
     end)
 
     if ok and applyConfigData(data) then
-        notify("House Helper", "Config loaded. Re-execute to refresh boxes.", 4)
+        notify("House Helper", "Loaded: " .. configName .. ". Re-execute to refresh boxes.", 4)
     else
         notify("House Helper", "Failed to load config.", 3)
+    end
+end
+
+local function setAutoloadConfig()
+    if not writefile then
+        notify("House Helper", "writefile not supported.", 3)
+        return
+    end
+
+    ensureFolder()
+    local name = safeName(selectedConfig or configName)
+
+    local ok, err = pcall(function()
+        writefile(autoloadFile, name)
+    end)
+
+    if ok then
+        notify("House Helper", "Autoload set to: " .. name, 3)
+    else
+        warn(err)
+        notify("House Helper", "Failed to set autoload.", 3)
+    end
+end
+
+local function clearAutoloadConfig()
+    if delfile and isfile and isfile(autoloadFile) then
+        delfile(autoloadFile)
+        notify("House Helper", "Autoload cleared.", 2)
+    else
+        notify("House Helper", "No autoload found.", 2)
     end
 end
 
@@ -217,7 +284,6 @@ local function useMagicDoor()
     end
 
     local unique = tool:FindFirstChild("unique")
-
     if not unique then
         notify("House Helper", "Magic Door unique not found.", 3)
         return
@@ -447,7 +513,7 @@ end
 
 ConfigTab:CreateParagraph({
     Title = "Config",
-    Content = "Save your messages and interval. Saved config auto-loads when you re-execute."
+    Content = "Save configs, choose a saved config, and set one to autoload on execution."
 })
 
 ConfigTab:CreateInput({
@@ -457,6 +523,23 @@ ConfigTab:CreateInput({
     CurrentValue = configName,
     Callback = function(text)
         configName = safeName(text)
+        selectedConfig = configName
+    end
+})
+
+ConfigTab:CreateDropdown({
+    Name = "Select Saved Config",
+    Options = getConfigList(),
+    CurrentOption = {selectedConfig},
+    MultipleOptions = false,
+    Callback = function(option)
+        if type(option) == "table" then
+            selectedConfig = safeName(option[1])
+        else
+            selectedConfig = safeName(option)
+        end
+
+        configName = selectedConfig
     end
 })
 
@@ -468,17 +551,32 @@ ConfigTab:CreateButton({
 })
 
 ConfigTab:CreateButton({
-    Name = "Load Config",
+    Name = "Load Selected Config",
     Callback = function()
-        loadConfig()
+        loadConfig(selectedConfig)
+    end
+})
+
+ConfigTab:CreateButton({
+    Name = "Set Selected as Autoload",
+    Callback = function()
+        setAutoloadConfig()
+    end
+})
+
+ConfigTab:CreateButton({
+    Name = "Clear Autoload",
+    Callback = function()
+        clearAutoloadConfig()
     end
 })
 
 ConfigTab:CreateButton({
     Name = "Print Config Path",
     Callback = function()
-        print("[House Helper Config Path]:", getConfigPath())
-        notify("House Helper", "Config path printed.", 2)
+        print("[House Helper Config Path]:", getConfigPath(configName))
+        print("[House Helper Autoload Path]:", autoloadFile)
+        notify("House Helper", "Config paths printed.", 2)
     end
 })
 
