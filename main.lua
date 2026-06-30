@@ -292,26 +292,52 @@ end
 
 local function useMagicDoor()
     local api = ReplicatedStorage:WaitForChild("API")
-    local remote = api:FindFirstChild("PlaceableToolAPI/UseMagicHouseDoor")
+    local magicDoorUnique = "2_6678f337ff7742638cbd7f6deb5581a0"
 
-    if not remote then
-        notify("House Helper", "UseMagicHouseDoor not found.", 3)
+    local char = player.Character or player.CharacterAdded:Wait()
+    local root = char:WaitForChild("HumanoidRootPart")
+
+    local equipRemote = api:FindFirstChild("ToolAPI/Equip")
+    local placeRemote = api:FindFirstChild("PlaceableToolAPI/CreatePlaceable")
+
+    if not equipRemote or not placeRemote then
+        notify("House Helper", "Magic Door remotes missing.", 3)
         return
     end
 
-    local ok, result = pcall(function()
-        if remote:IsA("RemoteFunction") then
-            return remote:InvokeServer()
-        elseif remote:IsA("RemoteEvent") then
-            remote:FireServer()
-            return "FireServer sent"
-        end
+    local equipOk, equipResult = pcall(function()
+        return equipRemote:InvokeServer(magicDoorUnique)
     end)
 
-    print("[House Helper]: UseMagicHouseDoor:", ok, result)
+    if not equipOk or equipResult == false then
+        notify("House Helper", "Magic Door equip failed.", 3)
+        return
+    end
 
-    if ok then
-        notify("House Helper", "Magic Door used!", 2)
+    task.wait(0.0001)
+
+    local tool = char:FindFirstChild("PlaceableTool")
+    if not tool then
+        notify("House Helper", "Magic Door tool not found.", 3)
+        return
+    end
+
+    local unique = tool:FindFirstChild("unique")
+    if not unique then
+        notify("House Helper", "Magic Door unique missing.", 3)
+        return
+    end
+
+    local cf = root.CFrame * CFrame.new(0, -3, -3)
+
+    local placeOk = pcall(function()
+        return placeRemote:InvokeServer(cf, {
+            unique = unique.Value
+        })
+    end)
+
+    if placeOk then
+        notify("House Helper", "Magic Door placed!", 2)
     else
         notify("House Helper", "Magic Door failed.", 3)
     end
