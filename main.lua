@@ -44,7 +44,9 @@ end
 
 local function safeName(name)
     name = tostring(name or "default"):gsub("[^%w_%-%s]", "")
-    if name == "" then name = "default" end
+    if name == "" then
+        name = "default"
+    end
     return name
 end
 
@@ -139,6 +141,9 @@ local function saveConfig()
 
     ensureFolder()
 
+    configName = safeName(configName)
+    selectedConfig = configName
+
     local data = {
         messages = Messages,
         interval = interval,
@@ -150,12 +155,31 @@ local function saveConfig()
     end)
 
     if ok then
-        selectedConfig = configName
-        notify("House Helper", "Config saved: " .. safeName(configName), 2)
+        notify("House Helper", "Config saved: " .. configName, 2)
     else
         warn(err)
         notify("House Helper", "Config save failed.", 3)
     end
+end
+
+local function createNewConfig()
+    if not writefile then
+        notify("House Helper", "writefile not supported.", 3)
+        return
+    end
+
+    configName = safeName(configName)
+    selectedConfig = configName
+
+    ensureFolder()
+
+    if isfile and isfile(getConfigPath(configName)) then
+        notify("House Helper", "Config already exists: " .. configName, 3)
+        return
+    end
+
+    saveConfig()
+    notify("House Helper", "Created config: " .. configName .. ". Re-execute to refresh dropdown.", 4)
 end
 
 local function loadConfig(name)
@@ -192,6 +216,7 @@ local function setAutoloadConfig()
     end
 
     ensureFolder()
+
     local name = safeName(selectedConfig or configName)
 
     local ok, err = pcall(function()
@@ -284,6 +309,7 @@ local function useMagicDoor()
     end
 
     local unique = tool:FindFirstChild("unique")
+
     if not unique then
         notify("House Helper", "Magic Door unique not found.", 3)
         return
@@ -513,7 +539,7 @@ end
 
 ConfigTab:CreateParagraph({
     Title = "Config",
-    Content = "Save configs, choose a saved config, and set one to autoload on execution."
+    Content = "Create, save, load, switch, and autoload message configs."
 })
 
 ConfigTab:CreateInput({
@@ -524,6 +550,13 @@ ConfigTab:CreateInput({
     Callback = function(text)
         configName = safeName(text)
         selectedConfig = configName
+    end
+})
+
+ConfigTab:CreateButton({
+    Name = "Create New Config",
+    Callback = function()
+        createNewConfig()
     end
 })
 
@@ -544,7 +577,7 @@ ConfigTab:CreateDropdown({
 })
 
 ConfigTab:CreateButton({
-    Name = "Save / Overwrite Config",
+    Name = "Save / Overwrite Selected Config",
     Callback = function()
         saveConfig()
     end
