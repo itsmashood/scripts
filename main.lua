@@ -4,6 +4,7 @@ local TextChatService = game:GetService("TextChatService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
+local TeleportService = game:GetService("TeleportService")
 
 local player = Players.LocalPlayer
 local MAX_MESSAGES = 20
@@ -22,11 +23,14 @@ local activeMessageCount = MAX_MESSAGES
 local interval = 5
 local sending = false
 
-local configFolder = "HouseHelper"
+local configFolder = "HouseHelperConfigs"
 local configName = "default"
 
 local lastHouseState = nil
 local busyHouseState = false
+
+local serverPlaceId = tostring(game.PlaceId)
+local serverJobId = tostring(game.JobId)
 
 local function notify(title, content, duration)
     Rayfield:Notify({
@@ -34,6 +38,114 @@ local function notify(title, content, duration)
         Content = content,
         Duration = duration or 2
     })
+end
+
+local function safeName(name)
+    name = tostring(name or "default"):gsub("[^%w_%-%s]", "")
+    if name == "" then name = "default" end
+    return name
+end
+
+local function getConfigPath()
+    return configFolder .. "/" .. safeName(configName) .. ".json"
+end
+
+local function ensureFolder()
+    if makefolder and isfolder and not isfolder(configFolder) then
+        pcall(function()
+            makefolder(configFolder)
+        end)
+    elseif makefolder and not isfolder then
+        pcall(function()
+            makefolder(configFolder)
+        end)
+    end
+end
+
+local function applyConfigData(data)
+    if type(data) ~= "table" then return false end
+
+    local loadedMessages = data.messages or {}
+
+    for i = 1, MAX_MESSAGES do
+        Messages[i] = tostring(loadedMessages[i] or "")
+    end
+
+    interval = tonumber(data.interval) or 5
+    if interval < 5 then interval = 5 end
+
+    activeMessageCount = tonumber(data.activeMessageCount) or MAX_MESSAGES
+    if activeMessageCount < 1 then activeMessageCount = 1 end
+    if activeMessageCount > MAX_MESSAGES then activeMessageCount = MAX_MESSAGES end
+
+    return true
+end
+
+local function loadConfigSilent()
+    if not isfile or not readfile then return end
+
+    local path = getConfigPath()
+    if not isfile(path) then return end
+
+    local ok, data = pcall(function()
+        return HttpService:JSONDecode(readfile(path))
+    end)
+
+    if ok then
+        applyConfigData(data)
+    end
+end
+
+loadConfigSilent()
+
+local function saveConfig()
+    if not writefile then
+        notify("House Helper", "writefile not supported.", 3)
+        return
+    end
+
+    ensureFolder()
+
+    local data = {
+        messages = Messages,
+        interval = interval,
+        activeMessageCount = activeMessageCount
+    }
+
+    local ok, err = pcall(function()
+        writefile(getConfigPath(), HttpService:JSONEncode(data))
+    end)
+
+    if ok then
+        notify("House Helper", "Config saved: " .. safeName(configName), 2)
+    else
+        warn(err)
+        notify("House Helper", "Config save failed.", 3)
+    end
+end
+
+local function loadConfig()
+    if not isfile or not readfile then
+        notify("House Helper", "readfile/isfile not supported.", 3)
+        return
+    end
+
+    local path = getConfigPath()
+
+    if not isfile(path) then
+        notify("House Helper", "Config not found: " .. safeName(configName), 3)
+        return
+    end
+
+    local ok, data = pcall(function()
+        return HttpService:JSONDecode(readfile(path))
+    end)
+
+    if ok and applyConfigData(data) then
+        notify("House Helper", "Config loaded. Re-execute to refresh boxes.", 4)
+    else
+        notify("House Helper", "Failed to load config.", 3)
+    end
 end
 
 local function sendChatMessage(msg)
@@ -46,67 +158,6 @@ local function sendChatMessage(msg)
             ReplicatedStorage.DefaultChatSystemChatEvents.SayMessageRequest:FireServer(msg, "All")
         end
     end)
-end
-
-local function safeName(name)
-    name = tostring(name or "default"):gsub("[^%w_%-%s]", "")
-    if name == "" then
-        name = "default"
-    end
-    return name
-end
-
-local function getConfigPath()
-    return configFolder .. "/" .. safeName(configName) .. ".json"
-end
-
-local function saveConfig()
-    if not writefile then
-        notify("House Helper", "writefile not supported.", 3)
-        return
-    end
-
-    if makefolder and isfolder and not isfolder(configFolder) then
-        makefolder(configFolder)
-    elseif makefolder and not isfolder then
-        pcall(function()
-            makefolder(configFolder)
-        end)
-    end
-
-    writefile(getConfigPath(), HttpService:JSONEncode({
-        messages = Messages,
-        interval = interval
-    }))
-
-    notify("House Helper", "Config saved / overwritten.", 2)
-end
-
-local function loadConfig()
-    local path = getConfigPath()
-
-    if not isfile or not readfile or not isfile(path) then
-        notify("House Helper", "Config not found.", 3)
-        return
-    end
-
-    local ok, data = pcall(function()
-        return HttpService:JSONDecode(readfile(path))
-    end)
-
-    if ok and type(data) == "table" then
-        local loadedMessages = data.messages or {}
-
-        for i = 1, MAX_MESSAGES do
-            Messages[i] = loadedMessages[i] or ""
-        end
-
-        interval = tonumber(data.interval) or interval
-
-        notify("House Helper", "Config loaded. Re-execute to refresh input text.", 4)
-    else
-        notify("House Helper", "Failed to load config.", 3)
-    end
 end
 
 local function callRemote(remoteName)
@@ -158,7 +209,6 @@ end
 local function useMagicDoor()
     local char = player.Character or player.CharacterAdded:Wait()
     local root = char:WaitForChild("HumanoidRootPart")
-
     local tool = char:FindFirstChild("PlaceableTool")
 
     if not tool then
@@ -198,8 +248,103 @@ local function useMagicDoor()
     end
 end
 
+local function teleportToJobId()
+    local placeId = tonumber(serverPlaceId)
+    local jobId = tostring(serverJobId):gsub("%s+", "")
+
+    if not placeId then
+        notify("Server Hopper", "Invalid PlaceId.", 3)
+        return
+    end
+
+    if jobId == "" then
+        notify("Server Hopper", "Invalid JobId.", 3)
+        return
+    end
+
+    notify("Server Hopper", "Teleporting to JobId...", 2)
+
+    local ok, err = pcall(function()
+        TeleportService:TeleportToPlaceInstance(placeId, jobId, player)
+    end)
+
+    if not ok then
+        warn(err)
+        notify("Server Hopper", "Teleport failed.", 3)
+    end
+end
+
+local function teleportRandomServer()
+    local placeId = tonumber(serverPlaceId) or game.PlaceId
+
+    notify("Server Hopper", "Finding random server...", 2)
+
+    local ok, result = pcall(function()
+        return game:HttpGet(
+            "https://games.roblox.com/v1/games/" ..
+            placeId ..
+            "/servers/Public?sortOrder=Asc&limit=100"
+        )
+    end)
+
+    if not ok then
+        notify("Server Hopper", "Could not fetch servers.", 3)
+        return
+    end
+
+    local data
+    local decoded = pcall(function()
+        data = HttpService:JSONDecode(result)
+    end)
+
+    if not decoded or not data or not data.data then
+        notify("Server Hopper", "Invalid server data.", 3)
+        return
+    end
+
+    local servers = {}
+
+    for _, server in ipairs(data.data) do
+        if server.id ~= game.JobId and server.playing < server.maxPlayers then
+            table.insert(servers, server.id)
+        end
+    end
+
+    if #servers == 0 then
+        notify("Server Hopper", "No open servers found.", 3)
+        return
+    end
+
+    local randomJobId = servers[math.random(1, #servers)]
+
+    notify("Server Hopper", "Joining random server...", 2)
+
+    local tpOk, tpErr = pcall(function()
+        TeleportService:TeleportToPlaceInstance(placeId, randomJobId, player)
+    end)
+
+    if not tpOk then
+        warn(tpErr)
+        notify("Server Hopper", "Random teleport failed.", 3)
+    end
+end
+
+local function copyCurrentServerInfo()
+    local info =
+        "PlaceId: " .. tostring(game.PlaceId) ..
+        "\nServer ID: " .. tostring(game.JobId)
+
+    if setclipboard then
+        setclipboard(info)
+        notify("Server Hopper", "Current server info copied.", 2)
+    else
+        print(info)
+        notify("Server Hopper", "Clipboard unsupported. Printed info.", 3)
+    end
+end
+
 local Window = Rayfield:CreateWindow({
-    Name = "🏠 House Helper",
+    Name = "House Helper",
     LoadingTitle = "House Helper",
     LoadingSubtitle = "House Messenger",
     ConfigurationSaving = {
@@ -210,6 +355,7 @@ local Window = Rayfield:CreateWindow({
 local MainTab = Window:CreateTab("Main", 4483362458)
 local MessengerTab = Window:CreateTab("Messenger", 4483362458)
 local ConfigTab = Window:CreateTab("Config", 4483362458)
+local ServerTab = Window:CreateTab("Server Hopper", 4483362458)
 
 MainTab:CreateParagraph({
     Title = "House Helper",
@@ -238,9 +384,19 @@ MainTab:CreateInput({
     CurrentValue = tostring(interval),
     Callback = function(text)
         interval = tonumber(text) or 5
-        if interval < 5 then
-            interval = 5
-        end
+        if interval < 5 then interval = 5 end
+    end
+})
+
+MainTab:CreateInput({
+    Name = "Active Message Count",
+    PlaceholderText = "20",
+    RemoveTextAfterFocusLost = false,
+    CurrentValue = tostring(activeMessageCount),
+    Callback = function(text)
+        activeMessageCount = tonumber(text) or MAX_MESSAGES
+        if activeMessageCount < 1 then activeMessageCount = 1 end
+        if activeMessageCount > MAX_MESSAGES then activeMessageCount = MAX_MESSAGES end
     end
 })
 
@@ -291,7 +447,7 @@ end
 
 ConfigTab:CreateParagraph({
     Title = "Config",
-    Content = "Save, load, or overwrite message configs."
+    Content = "Save your messages and interval. Saved config auto-loads when you re-execute."
 })
 
 ConfigTab:CreateInput({
@@ -315,5 +471,59 @@ ConfigTab:CreateButton({
     Name = "Load Config",
     Callback = function()
         loadConfig()
+    end
+})
+
+ConfigTab:CreateButton({
+    Name = "Print Config Path",
+    Callback = function()
+        print("[House Helper Config Path]:", getConfigPath())
+        notify("House Helper", "Config path printed.", 2)
+    end
+})
+
+ServerTab:CreateParagraph({
+    Title = "Server Hopper",
+    Content = "Teleport by PlaceId + JobId, hop to a random public server, or copy the current server info."
+})
+
+ServerTab:CreateInput({
+    Name = "PlaceId",
+    PlaceholderText = tostring(game.PlaceId),
+    RemoveTextAfterFocusLost = false,
+    CurrentValue = tostring(game.PlaceId),
+    Callback = function(text)
+        serverPlaceId = text
+    end
+})
+
+ServerTab:CreateInput({
+    Name = "Server ID / JobId",
+    PlaceholderText = "Paste JobId here...",
+    RemoveTextAfterFocusLost = false,
+    CurrentValue = tostring(game.JobId),
+    Callback = function(text)
+        serverJobId = text
+    end
+})
+
+ServerTab:CreateButton({
+    Name = "Teleport to JobId",
+    Callback = function()
+        teleportToJobId()
+    end
+})
+
+ServerTab:CreateButton({
+    Name = "Teleport to Random Server",
+    Callback = function()
+        teleportRandomServer()
+    end
+})
+
+ServerTab:CreateButton({
+    Name = "Copy Current Server Info",
+    Callback = function()
+        copyCurrentServerInfo()
     end
 })
