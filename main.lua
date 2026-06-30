@@ -23,6 +23,10 @@ local activeMessageCount = MAX_MESSAGES
 local interval = 5
 local sending = false
 
+local autoMagicDoor = false
+local magicDoorDelay = 55
+local magicDoorLoopRunning = false
+
 local configFolder = "HouseHelperConfigs"
 local configName = "default"
 local selectedConfig = "default"
@@ -80,6 +84,12 @@ local function applyConfigData(data)
     activeMessageCount = tonumber(data.activeMessageCount) or MAX_MESSAGES
     if activeMessageCount < 1 then activeMessageCount = 1 end
     if activeMessageCount > MAX_MESSAGES then activeMessageCount = MAX_MESSAGES end
+
+    autoMagicDoor = data.autoMagicDoor == true
+
+    magicDoorDelay = tonumber(data.magicDoorDelay) or 55
+    if magicDoorDelay < 10 then magicDoorDelay = 10 end
+    if magicDoorDelay > 60 then magicDoorDelay = 60 end
 
     return true
 end
@@ -142,7 +152,9 @@ local function saveConfig()
     local data = {
         messages = Messages,
         interval = interval,
-        activeMessageCount = activeMessageCount
+        activeMessageCount = activeMessageCount,
+        autoMagicDoor = autoMagicDoor,
+        magicDoorDelay = magicDoorDelay
     }
 
     local ok, err = pcall(function()
@@ -343,6 +355,27 @@ local function useMagicDoor()
     end
 end
 
+
+local function startAutoMagicDoor()
+    if magicDoorLoopRunning then return end
+
+    magicDoorLoopRunning = true
+
+    task.spawn(function()
+        while autoMagicDoor do
+            useMagicDoor()
+
+            local waited = 0
+            while autoMagicDoor and waited < magicDoorDelay do
+                task.wait(1)
+                waited += 1
+            end
+        end
+
+        magicDoorLoopRunning = false
+    end)
+end
+
 local function teleportToJobId()
     local placeId = tonumber(serverPlaceId)
     local jobId = tostring(serverJobId):gsub("%s+", "")
@@ -465,10 +498,28 @@ MainTab:CreateToggle({
     end
 })
 
-MainTab:CreateButton({
-    Name = "Place Magic Door",
-    Callback = function()
-        useMagicDoor()
+MainTab:CreateToggle({
+    Name = "Auto Place Magic Door",
+    CurrentValue = autoMagicDoor,
+    Callback = function(value)
+        autoMagicDoor = value
+
+        if autoMagicDoor then
+            startAutoMagicDoor()
+        end
+    end
+})
+
+MainTab:CreateSlider({
+    Name = "How often to place door",
+    Range = {10, 60},
+    Increment = 1,
+    Suffix = "s",
+    CurrentValue = magicDoorDelay,
+    Callback = function(value)
+        magicDoorDelay = tonumber(value) or 55
+        if magicDoorDelay < 10 then magicDoorDelay = 10 end
+        if magicDoorDelay > 60 then magicDoorDelay = 60 end
     end
 })
 
@@ -652,3 +703,7 @@ ServerTab:CreateButton({
         copyCurrentServerInfo()
     end
 })
+
+if autoMagicDoor then
+    startAutoMagicDoor()
+end
