@@ -472,8 +472,8 @@ local function copyCurrentServerInfo()
 end
 
 local Window = Rayfield:CreateWindow({
-    Name = "House Helper",
-    LoadingTitle = "House Helper",
+    Name = "Xyneria hub",
+    LoadingTitle = "Xyneria hub",
     LoadingSubtitle = "House Messenger",
     ConfigurationSaving = {
         Enabled = false
@@ -486,8 +486,8 @@ local ConfigTab = Window:CreateTab("Config", 4483362458)
 local ServerTab = Window:CreateTab("Server Hopper", 4483362458)
 
 MainTab:CreateParagraph({
-    Title = "House Helper",
-    Content = "List/unlist your house, place Magic Door, and start messenger."
+    Title = "Hub info",
+    Content = "List/unlist your house, autoplace Magic Door, and auto message."
 })
 
 MainTab:CreateToggle({
@@ -524,7 +524,7 @@ MainTab:CreateSlider({
 })
 
 MainTab:CreateInput({
-    Name = "Interval between messages",
+    Name = "Interval Seconds",
     PlaceholderText = "5",
     RemoveTextAfterFocusLost = false,
     CurrentValue = tostring(interval),
