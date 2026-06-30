@@ -571,15 +571,6 @@ ConfigTab:CreateButton({
     end
 })
 
-ConfigTab:CreateButton({
-    Name = "Print Config Path",
-    Callback = function()
-        print("[House Helper Config Path]:", getConfigPath(configName))
-        print("[House Helper Autoload Path]:", autoloadFile)
-        notify("House Helper", "Config paths printed.", 2)
-    end
-})
-
 ServerTab:CreateParagraph({
     Title = "Server Hopper",
     Content = "Teleport by PlaceId + JobId, hop to a random public server, or copy the current server info."
