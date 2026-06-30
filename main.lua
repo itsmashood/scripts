@@ -287,44 +287,33 @@ local function setHouseListed(shouldList)
     busyHouseState = false
 end
 
+-- keep your current script exactly the same,
+-- but replace ONLY your useMagicDoor() function with this:
+
 local function useMagicDoor()
-    local char = player.Character or player.CharacterAdded:Wait()
-    local root = char:WaitForChild("HumanoidRootPart")
-    local tool = char:FindFirstChild("PlaceableTool")
-
-    if not tool then
-        notify("House Helper", "Equip the Magic Door first.", 3)
-        return
-    end
-
-    local unique = tool:FindFirstChild("unique")
-    if not unique then
-        notify("House Helper", "Magic Door unique not found.", 3)
-        return
-    end
-
     local api = ReplicatedStorage:WaitForChild("API")
-    local remote = api:FindFirstChild("PlaceableToolAPI/CreatePlaceable")
+    local remote = api:FindFirstChild("PlaceableToolAPI/UseMagicHouseDoor")
 
     if not remote then
-        notify("House Helper", "CreatePlaceable not found.", 3)
+        notify("House Helper", "UseMagicHouseDoor not found.", 3)
         return
     end
 
-    local cf = root.CFrame * CFrame.new(0, -4, -6)
-
     local ok, result = pcall(function()
-        return remote:InvokeServer(cf, {
-            unique = unique.Value
-        })
+        if remote:IsA("RemoteFunction") then
+            return remote:InvokeServer()
+        elseif remote:IsA("RemoteEvent") then
+            remote:FireServer()
+            return "FireServer sent"
+        end
     end)
 
-    print("[House Helper]: Magic Door:", ok, result)
+    print("[House Helper]: UseMagicHouseDoor:", ok, result)
 
     if ok then
-        notify("House Helper", "Magic Door placed!", 2)
+        notify("House Helper", "Magic Door used!", 2)
     else
-        notify("House Helper", "Magic Door failed.", 2)
+        notify("House Helper", "Magic Door failed.", 3)
     end
 end
 
