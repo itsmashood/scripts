@@ -349,7 +349,7 @@ local function useMagicDoor()
     end)
 
     if placeOk then
-        notify("House Helper", "Magic Door placed!", 2)
+        notify("House Helper", "Door placed", 2)
     else
         notify("House Helper", "Magic Door failed.", 3)
     end
@@ -511,7 +511,7 @@ MainTab:CreateToggle({
 })
 
 MainTab:CreateSlider({
-    Name = "How often to place door",
+    Name = "Magic Door Delay Seconds",
     Range = {10, 60},
     Increment = 1,
     Suffix = "s",
@@ -524,7 +524,7 @@ MainTab:CreateSlider({
 })
 
 MainTab:CreateInput({
-    Name = "Interval Seconds",
+    Name = "Interval between messages",
     PlaceholderText = "5",
     RemoveTextAfterFocusLost = false,
     CurrentValue = tostring(interval),
@@ -535,7 +535,7 @@ MainTab:CreateInput({
 })
 
 MainTab:CreateInput({
-    Name = "Active Message Count",
+    Name = "Which messages to count? 1-20 eg. only does 1-3 if 3 ignores rest",
     PlaceholderText = "20",
     RemoveTextAfterFocusLost = false,
     CurrentValue = tostring(activeMessageCount),
@@ -547,7 +547,7 @@ MainTab:CreateInput({
 })
 
 MainTab:CreateToggle({
-    Name = "Start Messenger",
+    Name = "Start Auto Message",
     CurrentValue = false,
     Callback = function(value)
         sending = value
