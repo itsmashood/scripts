@@ -13425,21 +13425,42 @@ function Values:GetValue(name, variant, category)
     if not item then return nil end
 
     variant = norm(variant)
-    if variant == "" or variant == "regular" or variant == "normal" then
-        return item.regular
-    elseif variant == "np" or variant == "no potion" or variant == "no_potion_regular" then
+    variant = variant:gsub("[_%-%+]", " ")
+    variant = variant:gsub("%s+", " ")
+
+    -- No badge / no potion forms
+    if variant == "" or variant == "normal" or variant == "no potion" or variant == "np" or variant == "no potion regular" then
         return item.no_potion_regular or item.regular
-    elseif variant == "n" or variant == "neon" then
+    end
+
+    -- Regular fly/ride forms
+    if variant == "fr" or variant == "rf" or variant == "fly ride" or variant == "ride fly" or variant == "flyride" then
+        return item.regular
+    elseif variant == "f" or variant == "fly" then
+        return item.fly or item.regular
+    elseif variant == "r" or variant == "ride" then
+        return item.ride or item.regular
+    end
+
+    -- Neon forms
+    if variant == "n" or variant == "neon" or variant == "no potion neon" or variant == "np neon" then
+        return item.no_potion_neon or item.neon or item.regular
+    elseif variant == "nfr" or variant == "neon fr" or variant == "neon fly ride" or variant == "neon ride fly" then
         return item.neon or item.regular
-    elseif variant == "nfr" or variant == "neon fly ride" or variant == "neon_fly" then
+    elseif variant == "nf" or variant == "neon fly" then
         return item.neon_fly or item.neon or item.regular
-    elseif variant == "nr" or variant == "neon ride" or variant == "neon_ride" then
+    elseif variant == "nr" or variant == "neon ride" then
         return item.neon_ride or item.neon or item.regular
-    elseif variant == "m" or variant == "mega" then
-        return item.mega or item.neon or item.regular
-    elseif variant == "mfr" or variant == "mega fly ride" or variant == "mega_fly" then
+    end
+
+    -- Mega forms
+    if variant == "m" or variant == "mega" or variant == "no potion mega" or variant == "np mega" then
+        return item.no_potion_mega or item.mega or item.neon or item.regular
+    elseif variant == "mfr" or variant == "mega fr" or variant == "mega fly ride" or variant == "mega ride fly" then
+        return item.mega or item.regular
+    elseif variant == "mf" or variant == "mega fly" then
         return item.mega_fly or item.mega or item.regular
-    elseif variant == "mr" or variant == "mega ride" or variant == "mega_ride" then
+    elseif variant == "mr" or variant == "mega ride" then
         return item.mega_ride or item.mega or item.regular
     end
 
