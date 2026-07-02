@@ -59,7 +59,7 @@ jobs:
           # Debugging aid: If it fails, print the HTML layout so you can see if it's Cloudflare
           if len(values) < 20:
               print("--- DEBUG: HTML SNIPPET ---")
-              print(html[:1000]) # Prints the first 1000 characters of the downloaded page
+              print(html[:1000]) 
               print("---------------------------")
               raise SystemExit(f"Only found {len(values)} values. Database was not overwritten.")
 
