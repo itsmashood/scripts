@@ -28,41 +28,63 @@ jobs:
 
           html = Path("calculator.html").read_text(encoding="utf-8", errors="ignore")
 
-          # Looser regex to find chunks containing pet data, allowing nested elements
-          pattern = re.compile(r'\{[^}]+?"name"\s*:\s*"[^"]+?".+?\}', re.S)
+          # 1. Normalize Next.js escaped data strings into standard clean text
+          normalized = re.sub(r'\\+"', '"', html)
+          normalized = normalized.replace('&quot;', '"')
 
+          # 2. Find all normalized name boundaries
+          name_pattern = re.compile(r'"name"\s*:\s*"([^"]+)"')
           values = {}
 
-          def get_field(text, field_name, default=""):
-              match = re.search(r'"' + re.escape(field_name) + r'"\s*:\s*"([^"]*)"', text)
-              return match.group(1) if match else default
+          def extract_field(block, field_name):
+              # Check for standard string matches ("field":"value")
+              match = re.search(r'"' + re.escape(field_name) + r'"\s*:\s*"([^"]*)"', block)
+              if match:
+                  return match.group(1)
+              # Fallback check for unquoted numbers or booleans ("field":10.5)
+              match = re.search(r'"' + re.escape(field_name) + r'"\s*:\s*([0-9.-]+)', block)
+              return match.group(1) if match else ""
 
-          for match in pattern.finditer(html):
-              record = match.group(0)
-              name = get_field(record, "name")
-
-              if not name or "regularValue" not in record:
+          for name_match in name_pattern.finditer(normalized):
+              name = name_match.group(1)
+              
+              # Filter out layout keywords or structural configurations
+              if not name or len(name) > 60 or name.lower() in ["viewport", "charset", "description"]:
+                  continue
+                  
+              # Isolate the specific object chunk enclosing this pet entry
+              start_idx = normalized.rfind('{', max(0, name_match.start() - 1000), name_match.start())
+              end_idx = normalized.find('}', name_match.end(), min(len(normalized), name_match.end() + 1000))
+              
+              if start_idx != -1 and end_idx != -1:
+                  window = normalized[start_idx:end_idx+1]
+              else:
+                  window = normalized[max(0, name_match.start()-200):min(len(normalized), name_match.end()+800)]
+              
+              # Verify this local window is actually a calculator value record
+              if "regularValue" not in window and "neonValue" not in window:
                   continue
 
               values[name.lower()] = {
                   "name": name,
-                  "id": get_field(record, "id"),
-                  "regular": get_field(record, "regularValue"),
-                  "neon": get_field(record, "neonValue"),
-                  "mega": get_field(record, "megaValue"),
-                  "noPotionRegular": get_field(record, "npRegularValue"),
-                  "noPotionNeon": get_field(record, "npNeonValue"),
-                  "noPotionMega": get_field(record, "npMegaValue"),
-                  "demand": get_field(record, "regularDemand"),
+                  "id": extract_field(window, "id"),
+                  "regular": extract_field(window, "regularValue"),
+                  "neon": extract_field(window, "neonValue"),
+                  "mega": extract_field(window, "megaValue"),
+                  "noPotionRegular": extract_field(window, "npRegularValue"),
+                  "noPotionNeon": extract_field(window, "npNeonValue"),
+                  "noPotionMega": extract_field(window, "npMegaValue"),
+                  "demand": extract_field(window, "regularDemand"),
               }
 
-          # Debugging aid: If it fails, print the HTML layout so you can see if it's Cloudflare
+          # Safety guard check
           if len(values) < 20:
-              print("--- DEBUG: HTML SNIPPET ---")
-              print(html[:1000]) 
-              print("---------------------------")
+              print("--- DEBUG: NORMALIZED OUTPUT PREVIEW ---")
+              print(normalized[:1000])
+              print("----------------------------------------")
               raise SystemExit(f"Only found {len(values)} values. Database was not overwritten.")
 
+          # 3. Formulate the Lua table output
           lines = ["return {"]
           for key, item in sorted(values.items()):
               safe_key = key.replace("\\", "\\\\").replace('"', '\\"')
@@ -74,7 +96,7 @@ jobs:
           lines.append("}")
 
           Path("amvgg_values.lua").write_text("\n".join(lines) + "\n", encoding="utf-8")
-          print(f"Updated {len(values)} values.")
+          print(f"Successfully generated database with {len(values)} items.")
           PY
 
       - name: Commit updated database
