@@ -17,7 +17,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Download AMVGG calculator
-        run: curl -L "https://amvgg.com/calculator" -o calculator.html
+        run: curl -L -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" "https://amvgg.com/calculator" -o calculator.html
 
       - name: Extract values and write Lua database
         run: |
@@ -28,26 +28,20 @@ jobs:
 
           html = Path("calculator.html").read_text(encoding="utf-8", errors="ignore")
 
-          # Extract individual value records from the embedded calculator data.
-          pattern = re.compile(
-              r'\{[^{}]*"name"\s*:\s*"([^"]+)"[^{}]*"regularValue"\s*:\s*"([^"]*)"[^{}]*\}',
-              re.S
-          )
+          # Looser regex to find chunks containing pet data, allowing nested elements
+          pattern = re.compile(r'\{[^}]+?"name"\s*:\s*"[^"]+?".+?\}', re.S)
 
           values = {}
 
           def get_field(text, field_name, default=""):
-              match = re.search(
-                  r'"' + re.escape(field_name) + r'"\s*:\s*"([^"]*)"',
-                  text
-              )
+              match = re.search(r'"' + re.escape(field_name) + r'"\s*:\s*"([^"]*)"', text)
               return match.group(1) if match else default
 
           for match in pattern.finditer(html):
               record = match.group(0)
               name = get_field(record, "name")
 
-              if not name:
+              if not name or "regularValue" not in record:
                   continue
 
               values[name.lower()] = {
@@ -62,10 +56,12 @@ jobs:
                   "demand": get_field(record, "regularDemand"),
               }
 
+          # Debugging aid: If it fails, print the HTML layout so you can see if it's Cloudflare
           if len(values) < 20:
-              raise SystemExit(
-                  f"Only found {len(values)} values. Database was not overwritten."
-              )
+              print("--- DEBUG: HTML SNIPPET ---")
+              print(html[:1000]) # Prints the first 1000 characters of the downloaded page
+              print("---------------------------")
+              raise SystemExit(f"Only found {len(values)} values. Database was not overwritten.")
 
           lines = ["return {"]
           for key, item in sorted(values.items()):
@@ -77,11 +73,7 @@ jobs:
               lines.append("    },")
           lines.append("}")
 
-          Path("amvgg_values.lua").write_text(
-              "\n".join(lines) + "\n",
-              encoding="utf-8"
-          )
-
+          Path("amvgg_values.lua").write_text("\n".join(lines) + "\n", encoding="utf-8")
           print(f"Updated {len(values)} values.")
           PY
 
